@@ -1,0 +1,258 @@
+<!--
+  Persistent Cooldown Message Fetcher (Using localStorage)
+
+  This single-file HTML application uses a local JavaScript array for messages
+  and the browser's localStorage to make deletions permanent on your computer.
+
+  V3 Update: FIX - Ensures permanent deletion logic is correctly implemented
+  by deleting based on the message's index, not its content, and properly
+  saving/loading the deleted indices from localStorage.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Persistent Cooldown Message Fetcher</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configure custom theme for better aesthetics -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-blue': '#4c7cff',
+                        'secondary-gray': '#f3f4f6',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        /* Custom styles for card effect and responsiveness */
+        .card {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4 font-sans">
+
+    <div class="w-full max-w-lg">
+        <!-- Main Application Card -->
+        <div class="card bg-white p-6 md:p-10 rounded-xl border border-gray-200">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2 text-center">Secret Message Vault</h1>
+            <p id="user-info" class="text-sm text-gray-500 mb-6 text-center">Messages are stored locally in your browser and deleted permanently after viewing.</p>
+
+            <!-- Message Display Area -->
+            <div id="message-container" class="min-h-[100px] bg-secondary-gray p-4 rounded-lg flex items-center justify-center mb-6 border border-gray-300">
+                <p id="message-display" class="text-lg text-gray-700 italic text-center">
+                    Click the button to reveal your next message!
+                </p>
+            </div>
+
+            <!-- Action Button -->
+            <button id="fetch-button"
+                    class="w-full py-3 px-4 rounded-lg text-white font-semibold transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed bg-primary-blue hover:bg-blue-600"
+                    onclick="handleFetchClick()">
+                Get Next Secret Message
+            </button>
+
+            <!-- Cooldown Timer -->
+            <div id="cooldown-timer" class="mt-4 text-center text-red-500 font-medium hidden">
+                Next fetch available in <span id="cooldown-seconds"></span> seconds.
+            </div>
+
+            <!-- Message Count Display -->
+            <p id="count-display" class="mt-4 text-sm text-gray-600 text-center">Total messages in vault: 0</p>
+        </div>
+
+        <!-- Utility Card -->
+        <div class="card bg-gray-50 p-6 rounded-xl mt-6 border border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-800 mb-3">Vault Utilities</h2>
+            <p class="text-sm text-gray-600 mb-4">
+                You can easily add messages by editing the <code class="bg-gray-200 px-1 rounded">MASTER_MESSAGES</code> list
+                in the JavaScript code below.
+            </p>
+            <button onclick="resetVault()" class="w-full py-2 px-4 rounded-lg bg-yellow-500 text-white font-semibold hover:bg-yellow-600 transition duration-150">
+                Reset Vault (Bring Back All Deleted Messages)
+            </button>
+        </div>
+
+    </div>
+
+    <!-- Main Application Script -->
+    <script>
+        // --- EDIT THIS LIST TO ADD YOUR MESSAGES ---
+        // Add or remove strings here. Deletions are tracked by their position (index).
+        const MASTER_MESSAGES = [
+            "Noob",
+            "Bacon.",
+            "You are awesome!",
+            "Did you finish your homework yet?",
+            "Remember to water the plants.",
+            "A secret message you will only see once.",
+            "The final message in the vault!",
+            "Add your own secrets here."
+        ];
+        // ---------------------------------------------
+
+        const COOLDOWN_SECONDS = 10;
+        // Key for storing indices of deleted messages
+        const DELETED_LIST_KEY = 'deletedMessagesIndices';
+        // Key for tracking the cooldown time
+        const COOLDOWN_KEY = 'nextAllowedClick';
+
+        // Array of indices (numbers) that have been deleted/seen: [0, 2, 5]
+        let deletedMessages = [];
+        // Array of message objects currently available for fetching: [{ message: "Text", index: 1 }, ...]
+        let availableMessages = [];
+
+        /**
+         * Loads the list of deleted message indices from localStorage when the page starts.
+         */
+        function loadDeletedMessages() {
+            const storedDeleted = localStorage.getItem(DELETED_LIST_KEY);
+            if (storedDeleted) {
+                try {
+                    // Load and parse the array of indices
+                    deletedMessages = JSON.parse(storedDeleted).map(Number);
+                    // console.log('Loaded deleted indices:', deletedMessages); // DEBUG LOG
+                } catch (e) {
+                    // Handle corrupted data in localStorage
+                    console.error("Error loading deleted messages from storage:", e);
+                    deletedMessages = [];
+                }
+            } else {
+                deletedMessages = [];
+                // console.log('No deleted indices found in storage.'); // DEBUG LOG
+            }
+        }
+
+        /**
+         * Saves the updated list of deleted indices to localStorage.
+         */
+        function saveDeletedMessages() {
+            localStorage.setItem(DELETED_LIST_KEY, JSON.stringify(deletedMessages));
+            // console.log('Saved new deleted indices:', deletedMessages); // DEBUG LOG
+        }
+
+        /**
+         * Updates the 'availableMessages' array by filtering out deleted indices.
+         */
+        function updateAvailableMessages() {
+            // 1. Map MASTER_MESSAGES to include their original index
+            // 2. Filter out any message whose index is present in the deletedMessages array
+            availableMessages = MASTER_MESSAGES
+                .map((message, index) => ({ message, index }))
+                .filter(item => !deletedMessages.includes(item.index));
+        }
+
+        /**
+         * Updates the message count displayed on the page.
+         */
+        function updateCountDisplay() {
+            const countDisplay = document.getElementById('count-display');
+            countDisplay.textContent = `Total messages in vault: ${availableMessages.length}`;
+        }
+
+        /**
+         * Main click handler. Fetches a message, "deletes" it, and starts the cooldown.
+         */
+        function handleFetchClick() {
+            const display = document.getElementById('message-display');
+            
+            if (availableMessages.length === 0) {
+                display.textContent = "The vault is empty! Add more messages to the code to restart.";
+                return;
+            }
+
+            // 1. Pick a random item from the available list
+            const randomIndex = Math.floor(Math.random() * availableMessages.length);
+            const selectedItem = availableMessages[randomIndex];
+
+            // 2. Display the message
+            display.textContent = selectedItem.message;
+
+            // 3. "Delete" the message permanently
+            // Add its unique original index to the deleted list
+            if (!deletedMessages.includes(selectedItem.index)) {
+                deletedMessages.push(selectedItem.index);
+                // console.log('Deleting message at original index:', selectedItem.index); // DEBUG LOG
+                saveDeletedMessages();       // PERMANENTLY save to localStorage
+                updateAvailableMessages(); // Update the local array
+                updateCountDisplay();      // Update the UI
+            }
+
+
+            // 4. Start the cooldown
+            startCooldown();
+        }
+
+        /**
+         * Starts the cooldown timer and updates localStorage.
+         */
+        function startCooldown() {
+            const nextAllowedClick = Date.now() + (COOLDOWN_SECONDS * 1000);
+            localStorage.setItem(COOLDOWN_KEY, nextAllowedClick);
+            checkCooldown();
+        }
+
+        /**
+         * Checks the cooldown status and updates the UI. Runs every second.
+         */
+        function checkCooldown() {
+            const button = document.getElementById('fetch-button');
+            const timerDiv = document.getElementById('cooldown-timer');
+            const secondsSpan = document.getElementById('cooldown-seconds');
+            const nextAllowedClick = parseInt(localStorage.getItem(COOLDOWN_KEY), 10);
+            const timeRemaining = Math.ceil((nextAllowedClick - Date.now()) / 1000);
+
+            if (isNaN(nextAllowedClick) || timeRemaining <= 0) {
+                // Cooldown has expired
+                button.disabled = false;
+                button.textContent = "Get Next Secret Message";
+                timerDiv.classList.add('hidden');
+                localStorage.removeItem(COOLDOWN_KEY);
+            } else {
+                // Cooldown is active
+                button.disabled = true;
+                button.textContent = "On Cooldown";
+                secondsSpan.textContent = timeRemaining;
+                timerDiv.classList.remove('hidden');
+            }
+        }
+
+        /**
+         * Resets the vault by clearing the deleted messages list from localStorage.
+         */
+        function resetVault() {
+            localStorage.removeItem(DELETED_LIST_KEY);
+            deletedMessages = [];
+            updateAvailableMessages();
+            updateCountDisplay();
+            document.getElementById('message-display').textContent = "Vault has been reset! All messages are back.";
+            // Remove cooldown state too
+            localStorage.removeItem(COOLDOWN_KEY);
+            checkCooldown();
+        }
+
+        /**
+         * Initializes the application when the page loads.
+         */
+        window.onload = function() {
+            loadDeletedMessages();
+            updateAvailableMessages();
+            updateCountDisplay();
+            checkCooldown(); // Check cooldown status on load
+            // Set up interval to update the countdown every second
+            setInterval(checkCooldown, 1000);
+        }
+    </script>
+</body>
+</html>
