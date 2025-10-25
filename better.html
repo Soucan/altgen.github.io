@@ -1,0 +1,232 @@
+<!--
+  Persistent Cooldown Message Fetcher (Using localStorage)
+
+  This single-file HTML application uses a local JavaScript array for messages
+  and the browser's localStorage to make deletions permanent on your computer.
+
+  V8 Update: Updated the descriptive text to make "Username:Password" bold for clarity.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luna Alt Generator</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Configure custom theme -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary-blue': '#4c7cff',
+                        'secondary-gray': '#f3f4f6', // Light mode message box background
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        /* Custom styles for card effect and responsiveness */
+        .card {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            transition: transform 0.3s ease;
+        }
+    </style>
+</head>
+<!-- Apply static light background -->
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4 font-sans">
+
+    <div class="w-full max-w-lg">
+        
+        <!-- Theme Switch UI removed -->
+
+        <!-- Main Application Card -->
+        <div id="main-card" class="card bg-white p-6 md:p-10 rounded-xl border border-gray-200">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2 text-center">Luna Alt Generator</h1>
+            <p id="user-info" class="text-sm text-gray-500 mb-6 text-center">The Generated Alts are <b>Username:Password</b>, Any issues please conatact us restocks happen weekly.</p>
+
+            <!-- Message Display Area -->
+            <div id="message-container" class="min-h-[100px] bg-secondary-gray p-4 rounded-lg flex items-center justify-center mb-6 border border-gray-300">
+                <p id="message-display" class="text-lg text-gray-700 italic text-center">
+                    Click the Generate Alt button to generate a High Quality alt Account
+                </p>
+            </div>
+
+            <!-- Action Button -->
+            <button id="fetch-button"
+                    class="w-full py-3 px-4 rounded-lg text-white font-semibold transition duration-150 ease-in-out disabled:opacity-50 disabled:cursor-not-allowed bg-primary-blue hover:bg-blue-600"
+                    onclick="handleFetchClick()">
+                Generate Alt Account
+            </button>
+
+            <!-- Cooldown Timer -->
+            <div id="cooldown-timer" class="mt-4 text-center text-red-500 font-medium hidden">
+                Next fetch available in <span id="cooldown-seconds"></span> seconds.
+            </div>
+
+            <!-- Message Count Display -->
+            <p id="count-display" class="mt-4 text-sm text-gray-600 text-center">Total available alt accounts: 0</p>
+        </div>
+
+    </div>
+
+    <!-- Main Application Script -->
+    <script>
+        // --- EDIT THIS LIST TO ADD YOUR MESSAGES ---
+        const MASTER_MESSAGES = [
+            "Generated Alt: 'ShadowStriker42'",
+            "Generated Alt: 'CosmicWanderer_7'",
+            "Generated Alt: 'SilentObserver_X'",
+            "Generated Alt: 'PixelPirate'",
+            "Generated Alt: 'ZenithFlow'",
+            "Generated Alt: 'IronMaiden_99'",
+            "Generated Alt: 'DataKnight'",
+            "Generated Alt: 'VaporWaveGeek'"
+        ];
+        // ---------------------------------------------
+
+        // Cooldown is 5 minutes (300 seconds)
+        const COOLDOWN_SECONDS = 300;
+        const DELETED_LIST_KEY = 'deletedMessagesIndices';
+        const COOLDOWN_KEY = 'nextAllowedClick';
+        // const THEME_KEY = 'theme'; // Removed theme key
+
+        let deletedMessages = [];
+        let availableMessages = [];
+
+        // --- THEME LOGIC Removed ---
+
+        /**
+         * Loads the list of deleted message indices from localStorage when the page starts.
+         */
+        function loadDeletedMessages() {
+            const storedDeleted = localStorage.getItem(DELETED_LIST_KEY);
+            if (storedDeleted) {
+                try {
+                    deletedMessages = JSON.parse(storedDeleted).map(Number);
+                } catch (e) {
+                    console.error("Error loading deleted messages from storage:", e);
+                    deletedMessages = [];
+                }
+            } else {
+                deletedMessages = [];
+            }
+        }
+
+        /**
+         * Saves the updated list of deleted indices to localStorage.
+         */
+        function saveDeletedMessages() {
+            localStorage.setItem(DELETED_LIST_KEY, JSON.stringify(deletedMessages));
+        }
+
+        /**
+         * Updates the 'availableMessages' array by filtering out deleted indices.
+         */
+        function updateAvailableMessages() {
+            availableMessages = MASTER_MESSAGES
+                .map((message, index) => ({ message, index }))
+                .filter(item => !deletedMessages.includes(item.index));
+        }
+
+        /**
+         * Updates the message count displayed on the page.
+         */
+        function updateCountDisplay() {
+            const countDisplay = document.getElementById('count-display');
+            countDisplay.textContent = `Total available alt accounts: ${availableMessages.length}`;
+        }
+
+        /**
+         * Main click handler. Fetches a message, "deletes" it, and starts the cooldown.
+         */
+        function handleFetchClick() {
+            const display = document.getElementById('message-display');
+            
+            if (availableMessages.length === 0) {
+                display.textContent = "All high-quality alt accounts have been generated! Time to reset your browser storage to start over.";
+                return;
+            }
+
+            // 1. Pick a random item from the available list
+            const randomIndex = Math.floor(Math.random() * availableMessages.length);
+            const selectedItem = availableMessages[randomIndex];
+
+            // 2. Display the message
+            display.textContent = selectedItem.message;
+
+            // 3. "Delete" the message permanently (Mark as used)
+            if (!deletedMessages.includes(selectedItem.index)) {
+                deletedMessages.push(selectedItem.index);
+                saveDeletedMessages();       
+                updateAvailableMessages(); 
+                updateCountDisplay();      
+            }
+
+            // 4. Start the cooldown
+            startCooldown();
+        }
+
+        /**
+         * Starts the cooldown timer and updates localStorage.
+         */
+        function startCooldown() {
+            const nextAllowedClick = Date.now() + (COOLDOWN_SECONDS * 1000);
+            localStorage.setItem(COOLDOWN_KEY, nextAllowedClick);
+            checkCooldown();
+        }
+
+        /**
+         * Checks the cooldown status and updates the UI. Runs every second.
+         */
+        function checkCooldown() {
+            const button = document.getElementById('fetch-button');
+            const timerDiv = document.getElementById('cooldown-timer');
+            const secondsSpan = document.getElementById('cooldown-seconds');
+            const nextAllowedClick = parseInt(localStorage.getItem(COOLDOWN_KEY), 10);
+            let timeRemaining = Math.ceil((nextAllowedClick - Date.now()) / 1000);
+
+            if (isNaN(nextAllowedClick) || timeRemaining <= 0) {
+                // Cooldown has expired
+                button.disabled = false;
+                button.textContent = "Generate Alt Account";
+                timerDiv.classList.add('hidden');
+                localStorage.removeItem(COOLDOWN_KEY);
+            } else {
+                // Cooldown is active
+                button.disabled = true;
+                button.textContent = "On Cooldown";
+                
+                // Display remaining time in MM:SS format for better readability (since it's now 5 minutes)
+                const minutes = Math.floor(timeRemaining / 60);
+                const seconds = timeRemaining % 60;
+                const formattedTime = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+                
+                secondsSpan.textContent = formattedTime;
+                
+                timerDiv.classList.remove('hidden');
+            }
+        }
+
+        /**
+         * Initializes the application when the page loads.
+         */
+        window.onload = function() {
+            // 1. Load vault data
+            loadDeletedMessages();
+            updateAvailableMessages();
+            updateCountDisplay();
+            
+            // 2. Start cooldown checker
+            checkCooldown();
+            setInterval(checkCooldown, 1000);
+        }
+    </script>
+</body>
+</html>
